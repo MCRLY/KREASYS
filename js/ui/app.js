@@ -283,26 +283,30 @@ function renderMedia(raw) {
 }
 
 function chLg(r, c, attachment) {
-    const w = $('#c-log'), e = document.createElement('div'); e.className = `chat-msg ${r}`;
-    const hd = document.createElement('div'); hd.className = `chat-hdr ${r}`;
-    hd.innerHTML = r === 'USR' ? '<i data-lucide="user"></i> You' : '<i data-lucide="bot"></i> KREASYS';
-    const bx = document.createElement('div'); bx.className = 'msg-ctx';
-
-    // If user has an attachment, show a preview
-    if (r === 'USR' && attachment) {
-        if (attachment.dataUrl && attachment.type.startsWith('image/')) {
-            bx.innerHTML += `<img src="${attachment.dataUrl}" style="max-width:260px;border-radius:10px;margin-bottom:8px;display:block;box-shadow:0 4px 20px rgba(0,0,0,0.4)" alt="${attachment.name}">`;
-        } else {
-            bx.innerHTML += `<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:rgba(0,179,255,0.1);border:1px solid rgba(0,179,255,0.3);border-radius:6px;font-size:12px;color:var(--ac2);margin-bottom:8px"><i data-lucide="paperclip" style="width:12px;height:12px"></i>${attachment.name}</div>`;
-        }
+    const w = $('#c-log'), e = document.createElement('div');
+    e.className = `msg ${r === 'USR' ? 'usr-msg' : 'agt-msg'}`;
+    let attHtml = '';
+    if (attachment) {
+        if (attachment.isText) attHtml = `<div style="font-size:11px;color:var(--dim);margin-bottom:8px;padding:8px;background:rgba(0,179,255,0.05);border:1px solid rgba(0,179,255,0.2);border-radius:6px"><i data-lucide="file-text" style="width:12px;height:12px;margin-right:4px;display:inline-block;vertical-align:-2px"></i><b>${attachment.name}</b> (${(attachment.size / 1024).toFixed(1)}KB)</div>`;
+        else attHtml = `<div style="font-size:11px;color:var(--dim);margin-bottom:8px;padding:8px;background:rgba(0,179,255,0.05);border:1px solid rgba(0,179,255,0.2);border-radius:6px"><i data-lucide="image" style="width:12px;height:12px;margin-right:4px;display:inline-block;vertical-align:-2px"></i><b>${attachment.name}</b> (${(attachment.size / 1024).toFixed(1)}KB) - Image attached</div>`;
     }
-
-    // Render text with markdown and media tags
-    const cleaned = r === 'AGT' ? renderMedia(c) : c;
-    bx.innerHTML += (typeof marked !== 'undefined') ? marked.parse(cleaned) : cleaned;
-
-    e.appendChild(hd); e.appendChild(bx); w.appendChild(e); w.scrollTop = w.scrollHeight;
+    const h = (typeof marked !== 'undefined') ? marked.parse(c) : c;
+    const finalHtml = renderMedia(h);
+    e.innerHTML = `<div class="msg-role ${r}">${r === 'USR' ? 'You' : 'Agent'}</div><div class="msg-ctx">${attHtml}${finalHtml}</div>`;
+    w.appendChild(e); w.scrollTop = w.scrollHeight;
     if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/** Pre-renders a chat bubble and returns the context DOM element for real-time text injection */
+function chLgStream(r, initialContext) {
+    const w = $('#c-log'), e = document.createElement('div');
+    e.className = `msg ${r === 'USR' ? 'usr-msg' : 'agt-msg'}`;
+
+    e.innerHTML = `<div class="msg-role ${r}">${r === 'USR' ? 'You' : 'Agent'}</div><div class="msg-ctx">${initialContext}</div>`;
+    w.appendChild(e); w.scrollTop = w.scrollHeight;
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    return e.querySelector('.msg-ctx');
 }
 function clearTerm() { $('#t-log').innerHTML = '' }
 

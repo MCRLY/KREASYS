@@ -1,7 +1,6 @@
 'use strict';
 const $ = (s, e = document) => e.querySelector(s), $$ = (s, e = document) => Array.from(e.querySelectorAll(s));
 
-// Base endpoint URLs for each provider (OpenAI-compatible /chat/completions)
 const PRV = {
     openrouter: 'https://openrouter.ai/api/v1/chat/completions',
     groq: 'https://api.groq.com/openai/v1/chat/completions',
@@ -30,8 +29,8 @@ let st = {
     mods: [{ id: genId(), n: 'Default OpenRouter', p: 'openrouter', m: 'anthropic/claude-3-haiku', k: '', e: '', t: 'text' }]
 };
 
-const D_PERS = "You are KREASYS, a hyper-advanced browser AI. You run entirely locally in a strictly sandboxed environment. Your brain/config files are in `/system/`. All user projects, generated apps, and edited files MUST be strictly contained within `/workspace/` and its subdirectories.";
-const D_SKIL = "1. ALWAYS use <file path='/workspace/path/to/file.ext'>content</file> to create/edit user files. You may create nested folders (e.g., `/workspace/js/app.js`).\n2. Do NOT output markdown code blocks. ONLY use XML <file> tags.\n3. You are restricted to modifying files inside `/workspace/` unless explicitly instructed otherwise.\n4. AUTONOMOUS MESSAGING: To send a message to a specific Telegram user, use <tg_send chat_id=\"CHAT_ID\">message</tg_send>.\n5. RICH MEDIA: To reply with media, use <media type=\"image|audio|video\" url=\"URL\"/>.\n6. MEMORY NOTE: Your persistent memory is always provided. Important facts are auto-summarized there.";
+const D_PERS = "You are KREASYS, a hyper-advanced autonomous browser AI. You run entirely locally in a strictly sandboxed environment. Your brain/config files are in `/system/`. All user projects, generated apps, and edited files MUST be strictly contained within `/workspace/` and its subdirectories. You act as a capable Agent who can break down complex problems and solve them step-by-step.";
+const D_SKIL = "AGENTIC TOOLS (CRITICAL):\n1. WRITE FILES: Use <file path='/workspace/path/to/file.ext'>content</file> to create/edit user files.\n2. PLAN TRACKER: For any complex request, start your response with <plan>[ ] Step 1\n[ ] Step 2</plan>. This renders a UI flowchart for the user.\n3. HTML 2 IMAGE: To create a graphic/poster, use the block form of render_html in a SINGLE response. Write the HTML inline inside the tag, then set where to save the output:\n<render_html file='/workspace/poster.html' out='/workspace/poster.jpg'>\n<div style=\"width:1080px;font-family:sans-serif;background:#87CEEB\"><h1>My Design</h1></div>\n</render_html>\nThis is the ONLY correct way. Do NOT use a separate <file> tag for the HTML first.\n4. DELEGATE (SEQUENTIAL TASKS): To prevent context overload or hallucinations, separate large workflows using sub-agents. Use <delegate task='Analyze Data' temp='0.1'>Prompt</delegate>. The main agent will pause and wake up when done. Use lower temps (e.g., 0.1) for analysis tasks.\n5. TELEGRAM MESSAGES: To message a specific Telegram user, use <tg_send chat_id=\"CHAT_ID\">message</tg_send>.\n6. RICH MEDIA: To reply with media, use <media type=\"image|audio|video\" url=\"URL\"/>.\n7. Do NOT output markdown code blocks. ONLY use XML tags.";
 
 function genId() { return Math.random().toString(36).substr(2, 9) }
 
@@ -55,7 +54,6 @@ async function ld() {
             return x.p ? { ...x, t: x.t || 'text' } : { id: x.id, n: x.n, p: 'openrouter', m: x.m, k: x.k, e: '', t: x.t || 'text' };
         });
     }
-    // Initialize VFS core files
     if (!st.vfs['/system/personality.md']) st.vfs['/system/personality.md'] = D_PERS;
     if (!st.vfs['/system/skills.md']) st.vfs['/system/skills.md'] = D_SKIL;
     if (!st.vfs['/system/memory.log']) st.vfs['/system/memory.log'] = '';
@@ -66,7 +64,7 @@ async function ld() {
     $('#c-tmp').value = st.cfg.tmp;
     $('#c-tmp').nextElementSibling.innerText = st.cfg.tmp;
     rVfs();
-    renderTgUsers(); // render known users in Channeling tab
+    renderTgUsers();
 }
 
 async function svGlb() {
@@ -78,7 +76,6 @@ async function svGlb() {
 
 function ckDb() { localforage.length().then(c => $('#st-db').className = c > 0 ? 'dot ok' : 'dot err').catch(() => $('#st-db').className = 'dot err') }
 
-/** Render the known Telegram users directory in the Channeling tab */
 function renderTgUsers() {
     const container = document.getElementById('tg-users-list');
     if (!container) return;

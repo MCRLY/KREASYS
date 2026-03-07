@@ -15,6 +15,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#030308">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -213,11 +214,24 @@
                         compatible GPU.
                     </div>
 
+                    <div
+                        style="margin-bottom:16px;padding:12px 14px;background:rgba(0,179,255,0.08);border:1px solid rgba(0,179,255,0.3);border-radius:8px;font-size:12px;color:var(--ac2);line-height:1.6">
+                        <i data-lucide="monitor-speaker"
+                            style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:6px"></i>
+                        <strong>Hardware Notice:</strong> Downloading models without an adequate Dedicated GPU may <span
+                            style="color:var(--err)">fail or crash your browser tab</span> during the WebGPU compiling
+                        phase. To let you experiment freely, KREASYS will <strong>NOT block</strong> you from attempting
+                        a download if your PC fails the initial WebGPU check. We highly recommend testing <strong
+                            style="color:var(--ok)">Tiny models (e.g., SmolLM2)</strong> first to verify your system's
+                        compatibility before downloading larger multi-gigabyte models.
+                    </div>
+
                     <p style="font-size:13px;color:var(--dim);line-height:1.6;margin-bottom:16px">Run open-source LLMs
                         entirely in your browser — <strong style="color:var(--txt)">no API key required</strong>. Models
                         are downloaded once and cached for instant reuse. Click <strong
                             style="color:var(--txt)">Download &amp; Load</strong> to activate a model; <strong
                             style="color:var(--txt)">Delete</strong> to remove it from your browser cache.</p>
+
 
                     <div id="wllm-progress-wrap" style="display:none;margin-bottom:16px">
                         <div style="display:flex;justify-content:space-between;margin-bottom:6px">
@@ -361,13 +375,13 @@
     </div>
 
     <div id="toast-container" class="toast-container"></div>
-    <script src="js/core/state.js" defer></script>
-    <script src="js/core/vfs.js" defer></script>
-    <script src="js/core/webllm.js" defer></script>
-    <script src="js/core/memory.js" defer></script>
-    <script src="js/core/ai.js" defer></script>
-    <script src="js/core/telegram.js" defer></script>
-    <script src="js/ui/app.js" defer></script>
+    <script src="js/core/state.js?v=3" defer></script>
+    <script src="js/core/vfs.js?v=3" defer></script>
+    <script src="js/core/webllm.js?v=3" defer></script>
+    <script src="js/core/memory.js?v=3" defer></script>
+    <script src="js/core/ai.js?v=3" defer></script>
+    <script src="js/core/telegram.js?v=3" defer></script>
+    <script src="js/ui/app.js?v=3" defer></script>
     <script src="js/global.js" defer></script>
 </body>
 

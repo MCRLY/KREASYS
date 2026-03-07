@@ -1,49 +1,105 @@
-async function llm(p, u, mod) {
+async function llm(p, u, mod, onChunk) {
     if (!st.mods.length) throw new Error("No models configured.");
     const m = mod || st.mods[0];
 
-    // --- WebLLM local inference path ---
     if (m.p === 'webllm') {
         if (typeof wIsReady === 'function' && wIsReady()) {
-            return await wLlm(p, u, st.cfg.tmp, false);
+            return await wLlm(p, u, st.cfg.tmp, true, onChunk);
         } else {
             throw new Error('WebLLM model is not loaded. Please load a local model first from the Local AI tab.');
         }
     }
 
-    // Resolve the endpoint URL
-    const url = m.p === 'custom' ? m.e : PRV[m.p];
+    let url = m.p === 'custom' ? m.e : PRV[m.p];
     if (!url) throw new Error(`Unknown provider "${m.p}". Please select a provider or use Custom.`);
     if (!m.k && m.p !== 'ollama') throw new Error(`No API key set for "${m.n}". Please add your key in the Models tab.`);
 
-    // --- Anthropic API — different shape: /messages, x-api-key header ---
-    if (m.p === 'anthropic') {
-        const body = { model: m.m, max_tokens: 2048, system: p, messages: [{ role: 'user', content: u }] };
-        const r = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-api-key': m.k.trim(), 'anthropic-version': '2023-06-01' },
-            body: JSON.stringify(body)
-        });
-        if (!r.ok) throw new Error(`Anthropic API error ${r.status}: ${await r.text()}`);
-        const d = await r.json();
-        return d.content?.[0]?.text || '';
+    const isAnthropic = m.p === 'anthropic';
+    const isLocalOllama = m.p === 'ollama';
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (isAnthropic) {
+        headers['x-api-key'] = m.k.trim();
+        headers['anthropic-version'] = '2023-06-01';
+    } else {
+        if (m.k) headers['Authorization'] = `Bearer ${m.k.trim()}`;
+        if (m.p === 'openrouter') { headers['HTTP-Referer'] = window.location.origin; headers['X-Title'] = 'KREASYS'; }
     }
 
-    // --- OpenAI-compatible path ---
-    const headers = { 'Content-Type': 'application/json' };
-    if (m.k) headers['Authorization'] = `Bearer ${m.k.trim()}`;
-    if (m.p === 'openrouter') { headers['HTTP-Referer'] = window.location.origin; headers['X-Title'] = 'KREASYS'; }
+    let b;
+    if (isAnthropic) {
+        b = { model: m.m, max_tokens: 2048, system: p, messages: [{ role: 'user', content: u }], stream: !!onChunk };
+    } else {
+        b = { model: m.m, messages: [{ role: 'system', content: p }, { role: 'user', content: u }], temperature: parseFloat(st.cfg.tmp), stream: !!onChunk };
+        if (m.p === 'openrouter' && onChunk) b.stream_options = { include_usage: true };
+    }
 
-    const b = { model: m.m, messages: [{ role: 'system', content: p }, { role: 'user', content: u }], temperature: st.cfg.tmp };
     const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(b) });
     if (!r.ok) throw new Error(`API error ${r.status} from ${m.p}: ${await r.text()}`);
-    const d = await r.json();
-    if (m.p === 'openrouter') st.tk += (d.usage?.total_tokens || 0);
-    return d.choices?.[0]?.message?.content || d.message?.content || '';
+
+    if (!onChunk) {
+        const d = await r.json();
+        if (isAnthropic) return d.content?.[0]?.text || '';
+        if (m.p === 'openrouter') st.tk += (d.usage?.total_tokens || 0);
+        return d.choices?.[0]?.message?.content || d.message?.content || '';
+    }
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let fullText = '';
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(':')) continue;
+
+            if (trimmed.startsWith('data: ')) {
+                const dataStr = trimmed.substring(6);
+                if (dataStr === '[DONE]') continue;
+                try {
+                    const data = JSON.parse(dataStr);
+                    let chunkText = '';
+
+                    if (isAnthropic) {
+                        if (data.type === 'content_block_delta' && data.delta?.text) {
+                            chunkText = data.delta.text;
+                        }
+                    } else {
+                        chunkText = data.choices?.[0]?.delta?.content || '';
+                        if (m.p === 'openrouter' && data.usage) st.tk += (data.usage.total_tokens || 0);
+                    }
+
+                    if (chunkText) {
+                        fullText += chunkText;
+                        onChunk(chunkText, fullText);
+                    }
+                } catch (e) {
+                    console.warn('Streaming parse error on chunk:', dataStr);
+                }
+            } else if (isLocalOllama) {
+                try {
+                    const data = JSON.parse(trimmed);
+                    const chunkText = data.message?.content || '';
+                    if (chunkText) {
+                        fullText += chunkText;
+                        onChunk(chunkText, fullText);
+                    }
+                } catch (e) { }
+            }
+        }
+    }
+    return fullText;
 }
 
 async function route(q, attachment) {
-    // Prioritize local WebLLM if loaded
     if (typeof wIsReady === 'function' && wIsReady()) {
         const localMod = st.mods.find(m => m.p === 'webllm');
         if (localMod) { lg('SYS', `Router: Using local WebLLM [${localMod.n}]`); return localMod; }
@@ -75,18 +131,15 @@ async function xc(q, isC, attachment) {
     lg('USR', q);
     if (isC) chLg('USR', q, attachment);
 
-    // Reset the memory idle timer when a task starts
     if (typeof memResetIdle === 'function') memResetIdle();
 
     const m = await route(q, attachment);
     lg('SYS', `Router selected [${m.n}]`);
 
-    // Build known Telegram users list
     const knownUsers = (st.cfg.tgUsers && Object.keys(st.cfg.tgUsers).length > 0)
         ? Object.entries(st.cfg.tgUsers).map(([name, id]) => `- ${name}: ${id}`).join('\n')
         : 'None yet.';
 
-    // Use the two-layer memory context (memory.md + memory.log)
     const memCtx = (typeof memContext === 'function') ? memContext() : (st.vfs['/system/memory.log'] || '');
 
     const p = `${st.vfs['/system/personality.md']}\n\nSKILLS:\n${st.vfs['/system/skills.md']}\n\nKNOWN TELEGRAM USERS (use these IDs with <tg_send>):\n${knownUsers}\n\n${memCtx}\n\nVFS STATE:\n${buildVfsContext()}`;
@@ -97,40 +150,56 @@ async function xc(q, isC, attachment) {
     }
 
     try {
-        if (m.p === 'webllm' && isC && typeof wIsReady === 'function' && wIsReady()) {
-            const r = await wLlm(p, userMsg, st.cfg.tmp, true);
-            if (typeof psPlan === 'function') psPlan(r);
-            if (typeof memAppend === 'function') memAppend('AGT', r);
-            lg('AGT', r); psVfs(r);
-        } else {
-            const r = await llm(p, userMsg, m);
-            if (typeof psPlan === 'function') psPlan(r);
-            lg('AGT', r);
+        let cLogDom = null;
 
-            // Autonomous Telegram dispatches
-            const tgRg = /<tg_send\s+chat_id=["']?([^"'>]+)["']?>([\s\S]*?)<\/tg_send>/gi;
-            let tm;
-            while ((tm = tgRg.exec(r)) !== null) {
-                const tgtId = tm[1], payload = tm[2].trim();
-                lg('SYS', `Autonomous Dispatch -> TG ID: ${tgtId}`);
-                if (st.cfg.tg) {
-                    fetch(`https://api.telegram.org/bot${st.cfg.tg}/sendMessage`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chat_id: tgtId, text: payload })
-                    }).catch(e => lg('ERR', `TG Dispatch failed: ${e.message}`));
+        const streamCallback = (chunk, accumulated) => {
+            if (isC && cLogDom) {
+                if (Math.random() > 0.3 || accumulated.endsWith('\n')) {
+                    cLogDom.innerHTML = marked.parse(accumulated + ' █');
+                    cLogDom.parentElement.scrollTop = cLogDom.parentElement.scrollHeight;
                 }
             }
+        };
 
-            if (isC) chLg('AGT', r
+        if (isC) {
+            cLogDom = chLgStream('AGT', '...');
+        }
+
+        const r = await llm(p, userMsg, m, streamCallback);
+
+        if (isC && cLogDom) {
+            cLogDom.innerHTML = marked.parse(r
                 .replace(/<file[^>]*>[\s\S]*?<\/file>/g, '*[VFS update — Check Workspace]*')
                 .replace(/<plan[^>]*>[\s\S]*?<\/plan>/gi, '')
-                .replace(/<tg_send[^>]*>[\s\S]*?<\/tg_send>/gi, '*[Autonomous Telegram Message Dispatched]*'));
-            psVfs(r);
+                .replace(/<tg_send[^>]*>[\s\S]*?<\/tg_send>/gi, '*[Autonomous Telegram Message Dispatched]*')
+            );
         }
-    } catch (e) { lg('ERR', e.message); if (isC) chLg('AGT', `**Error:** ${e.message}`) }
+
+        if (typeof psPlan === 'function') psPlan(r);
+        if (typeof memAppend === 'function' && m.p === 'webllm') memAppend('AGT', r);
+        lg('AGT', r);
+
+        const tgRg = /<tg_send\s+chat_id=["']?([^"'>]+)["']?>([\s\S]*?)<\/tg_send>/gi;
+        let tm;
+        while ((tm = tgRg.exec(r)) !== null) {
+            const tgtId = tm[1], payload = tm[2].trim();
+            lg('SYS', `Autonomous Dispatch -> TG ID: ${tgtId}`);
+            if (st.cfg.tg) {
+                fetch(`https://api.telegram.org/bot${st.cfg.tg}/sendMessage`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: tgtId, text: payload })
+                }).catch(e => lg('ERR', `TG Dispatch failed: ${e.message}`));
+            }
+        }
+
+        psVfs(r);
+
+    } catch (e) {
+        lg('ERR', e.message);
+        if (isC) chLg('AGT', `**Error:** ${e.message}`);
+    }
 
     st.run = 0;
     $('#btn-run-c').style.display = ''; $('#btn-stop-c').style.display = 'none';
-    // Restart idle memory timer after task completes
     if (typeof memResetIdle === 'function') memResetIdle();
 }

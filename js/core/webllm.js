@@ -1,42 +1,19 @@
-/**
- * KREASYS WebLLM Integration — v2.1
- *
- * Model weights are stored in the browser's Cache Storage API (managed by WebLLM).
- * Metadata (which models are "installed") is tracked in localforage (IndexedDB),
- * under st.cfg.wllmLib. This gives users full visibility and control.
- *
- * Requirements:
- *   - Chrome 113+ / Edge 113+ / Safari 18+
- *   - WebGPU-capable GPU (discrete or integrated with enough VRAM)
- *   - Site served from http:// or https:// (NOT file://) for Cache Storage & ServiceWorker
- *
- * CDN: https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm (primary)
- *      https://esm.run/@mlc-ai/web-llm                   (fallback)
- */
-
-// ── Engine State ───────────────────────────────────────────────────────────────
 let wEngine = null;
-let wStatus = 'idle';   // 'idle' | 'loading' | 'ready' | 'error'
-let wModel = null;     // currently ACTIVE model ID
-let webllm = null;     // lazy-loaded ES module
-let wGpuAdapter = null; // cached GPU adapter result
-
-// ── Model Catalog ──────────────────────────────────────────────────────────────
+let wStatus = 'idle';   
+let wModel = null;     
+let webllm = null;     
+let wGpuAdapter = null; 
 const WLLM_MODELS = [
-    // Tiny — best for low-end or integrated GPUs
     { id: 'SmolLM2-135M-Instruct-q0f16-MLC', label: 'SmolLM2 135M', family: 'SmolLM2', vram: '~0.3 GB', sizeGB: 0.27 },
     { id: 'SmolLM2-360M-Instruct-q0f16-MLC', label: 'SmolLM2 360M', family: 'SmolLM2', vram: '~0.7 GB', sizeGB: 0.64 },
     { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 0.5B', family: 'Qwen2.5', vram: '~0.5 GB', sizeGB: 0.46 },
-    // Small
     { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 1.5B', family: 'Qwen2.5', vram: '~1.1 GB', sizeGB: 1.0 },
     { id: 'gemma-2-2b-it-q4f16_1-MLC', label: 'Gemma 2 2B', family: 'Gemma', vram: '~1.5 GB', sizeGB: 1.4 },
     { id: 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC', label: 'TinyLlama 1.1B', family: 'Llama', vram: '~0.7 GB', sizeGB: 0.66 },
     { id: 'Phi-1_5-q4f16_1-MLC-1k', label: 'Phi 1.5 (1K ctx)', family: 'Phi', vram: '~1.0 GB', sizeGB: 0.84 },
-    // Medium
     { id: 'Llama-3.2-3B-Instruct-q4f32_1-MLC', label: 'Llama 3.2 3B', family: 'Llama', vram: '~2.1 GB', sizeGB: 1.9 },
     { id: 'Phi-3.5-mini-instruct-q4f16_1-MLC', label: 'Phi 3.5 Mini', family: 'Phi', vram: '~2.4 GB', sizeGB: 2.1 },
     { id: 'Phi-3-mini-4k-instruct-q4f16_1-MLC', label: 'Phi 3 Mini (4K)', family: 'Phi', vram: '~2.2 GB', sizeGB: 1.9 },
-    // Large — dedicated GPU recommended
     { id: 'Llama-3.1-8B-Instruct-q4f32_1-MLC', label: 'Llama 3.1 8B', family: 'Llama', vram: '~5.1 GB', sizeGB: 4.9 },
     { id: 'Mistral-7B-Instruct-v0.3-q4f16_1-MLC', label: 'Mistral 7B v0.3', family: 'Mistral', vram: '~4.4 GB', sizeGB: 4.1 },
     { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 7B', family: 'Qwen2.5', vram: '~4.7 GB', sizeGB: 4.4 },
@@ -50,13 +27,9 @@ function wGetModels() { return WLLM_MODELS; }
 function wIsReady() { return wStatus === 'ready' && wEngine !== null; }
 function wActiveModel() { return wModel; }
 
-/**
- * Perform a proper async WebGPU adapter probe.
- * Returns true only if a real physical adapter is accessible.
- */
 async function wCheckGPU() {
     if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false;
-    if (wGpuAdapter !== null) return wGpuAdapter; // cached
+    if (wGpuAdapter !== null) return wGpuAdapter; 
     try {
         const adapter = await navigator.gpu.requestAdapter();
         wGpuAdapter = !!adapter;
@@ -64,8 +37,6 @@ async function wCheckGPU() {
     } catch (_) { wGpuAdapter = false; }
     return wGpuAdapter;
 }
-
-// ── Library Metadata (persisted in localforage via st.cfg) ──────────────────
 
 function wLib() {
     if (!st.cfg.wllmLib) st.cfg.wllmLib = {};
@@ -90,8 +61,6 @@ function wMarkRemoved(modelId) {
     delete wLib()[modelId];
     svGlb();
 }
-
-// ── Cache Deletion ──────────────────────────────────────────────────────────
 
 async function wDeleteModel(modelId) {
     try {
@@ -121,8 +90,6 @@ async function wDeleteModel(modelId) {
     wUpdateStatusPill();
 }
 
-// ── UI Helpers ──────────────────────────────────────────────────────────────
-
 function wUpdateStatusPill() {
     const pill = document.getElementById('wllm-status');
     const label = document.getElementById('wllm-status-label');
@@ -143,8 +110,6 @@ function wUpdateProgress(status, progress, text) {
     if (barLbl && text) barLbl.textContent = text;
     wUpdateStatusPill();
 }
-
-// Show a persistent in-card error banner with a helpful human-readable message
 function wShowError(msg) {
     wStatus = 'error';
     wUpdateStatusPill();
@@ -154,18 +119,14 @@ function wShowError(msg) {
     if (barWrap) barWrap.style.display = 'block';
     if (bar) { bar.style.width = '100%'; bar.style.background = 'var(--err)'; }
     if (barLbl) barLbl.textContent = msg;
-    // Auto-hide after 8 seconds
     setTimeout(() => {
         if (barWrap) barWrap.style.display = 'none';
         if (bar) bar.style.background = 'linear-gradient(90deg,var(--ac2),var(--ac))';
     }, 8000);
 }
 
-// ── CDN Import ──────────────────────────────────────────────────────────────
-
 async function wImport() {
     if (webllm) return webllm;
-    // Try jsDelivr first (works on http/https and most environments)
     const cdnUrls = [
         'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm',
         'https://esm.run/@mlc-ai/web-llm',
@@ -186,26 +147,17 @@ async function wImport() {
     throw new Error(`WebLLM CDN import failed on all mirrors: ${lastErr?.message}`);
 }
 
-// ── Load / Unload ───────────────────────────────────────────────────────────
-
 async function wLoad(modelId) {
     if (wStatus === 'loading') {
         lg('SYS', 'WebLLM: A model is already loading. Please wait.');
         return;
     }
-
-    // Properly probe the GPU adapter (async)
     wUpdateProgress('loading', 0, 'Checking GPU…');
     const gpuOk = await wCheckGPU();
     if (!gpuOk) {
-        const errMsg = 'WebGPU GPU adapter not found. To use Local AI you need: ' +
-            'Chrome 113+ or Edge 113+ with a WebGPU-capable GPU. ' +
-            'Open chrome://flags and enable "WebGPU". ' +
-            'If on a server/CI environment, GPU is not available.';
-        wShowError('No WebGPU GPU found — see SysLog for details.');
-        lg('ERR', 'WebLLM: ' + errMsg);
-        if (typeof renderWllmLibrary === 'function') renderWllmLibrary();
-        return;
+        const errMsg = 'WebGPU adapter check failed or returned null. Models may fail to load or run very slowly.';
+        lg('ERR', 'WebLLM Warning: ' + errMsg);
+        wUpdateProgress('loading', 0, 'GPU Warning: Attempting download anyway…');
     }
 
     if (wEngine) { try { await wEngine.unload(); } catch (_) { } wEngine = null; }
@@ -220,7 +172,6 @@ async function wLoad(modelId) {
                 const pct = Math.round((p.progress || 0) * 100);
                 const text = p.text ? `${p.text} (${pct}%)` : `Downloading… ${pct}%`;
                 wUpdateProgress('loading', p.progress || 0, text);
-                // Update the button text on the active row
                 const safeId = modelId.replace(/[^a-z0-9]/gi, '_');
                 const btn = document.getElementById(`wllm-dl-${safeId}`);
                 if (btn) btn.textContent = `${pct}%`;
@@ -228,7 +179,6 @@ async function wLoad(modelId) {
         });
         wMarkDownloaded(modelId);
         wUpdateProgress('ready', 1, '');
-        // Reset the progress bar color
         const bar = document.getElementById('wllm-progress-bar');
         if (bar) bar.style.background = 'linear-gradient(90deg,var(--ac2),var(--ac))';
         wUpdateStatusPill();
@@ -253,8 +203,6 @@ async function wUnload() {
     lg('SYS', 'WebLLM: Engine unloaded. GPU memory freed.');
     if (typeof renderWllmLibrary === 'function') renderWllmLibrary();
 }
-
-// ── Test Engine ─────────────────────────────────────────────────────────────
 
 async function wTest(modelId) {
     const safeId = modelId.replace(/[^a-z0-9]/gi, '_');
@@ -288,30 +236,21 @@ async function wTest(modelId) {
     }
 }
 
-// ── Inference ───────────────────────────────────────────────────────────────
-
-async function wLlm(systemPrompt, userMsg, temperature = 0.7, isChat = false) {
+async function wLlm(systemPrompt, userMsg, temperature = 0.7, isChat = false, onChunk = null) {
     if (!wEngine || wStatus !== 'ready') {
         throw new Error('No local model loaded. Go to Models tab and download a model first.');
     }
     const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }];
 
-    if (isChat) {
-        const w = document.getElementById('c-log');
-        const bbl = document.createElement('div'); bbl.className = 'chat-msg AGT';
-        const hd = document.createElement('div'); hd.className = 'chat-hdr AGT';
-        hd.innerHTML = '<i data-lucide="cpu"></i> KREASYS <span style="font-size:10px;background:rgba(0,255,204,0.15);padding:2px 6px;border-radius:4px;margin-left:6px">Local AI</span>';
-        const bx = document.createElement('div'); bx.className = 'msg-ctx';
-        bbl.appendChild(hd); bbl.appendChild(bx);
-        if (w) { w.appendChild(bbl); w.scrollTop = w.scrollHeight; }
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-
+    if (isChat || onChunk) {
         let full = '';
         const chunks = await wEngine.chat.completions.create({ messages, temperature, stream: true });
         for await (const chunk of chunks) {
-            full += chunk.choices[0]?.delta?.content || '';
-            bx.innerHTML = (typeof marked !== 'undefined') ? marked.parse(full) : full;
-            if (w) w.scrollTop = w.scrollHeight;
+            const txt = chunk.choices[0]?.delta?.content || '';
+            if (txt) {
+                full += txt;
+                if (onChunk) onChunk(txt, full);
+            }
         }
         return full;
     } else {

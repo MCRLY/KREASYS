@@ -9,6 +9,107 @@ function psVfs(ctx) {
         if (typeof showToast === 'function') showToast('File Updated', f);
     }
     if (hit) { svGlb(); rVfs(); if (st.cfn.sys) $('#vfs-ed-sys').value = st.vfs[st.cfn.sys] || ''; if (st.cfn.wrk) $('#vfs-ed-wrk').value = st.vfs[st.cfn.wrk] || '' }
+
+    const rdrRgSelf = /<render_html\s+file=["']?([^"'>]+)["']?\s+out=["']?([^"'>]+)["']?\s*\/>/gi;
+    const rdrRgBlock = /<render_html\s+file=["']?([^"'>]+)["']?\s+out=["']?([^"'>]+)["']?\s*>([\s\S]*?)<\/render_html>/gi;
+    const scheduledRenders = [];
+
+    let rm;
+    while ((rm = rdrRgSelf.exec(ctx)) !== null) {
+        let inF = rm[1].trim();
+        const outF = rm[2].trim();
+        if (!inF.startsWith('/system/') && !inF.startsWith('/workspace/')) inF = '/workspace/' + inF.replace(/^\//, '');
+        scheduledRenders.push({ inF, outF, inline: null });
+    }
+    while ((rm = rdrRgBlock.exec(ctx)) !== null) {
+        let inF = rm[1].trim();
+        const outF = rm[2].trim();
+        const inline = rm[3].trim();
+        if (!inF.startsWith('/system/') && !inF.startsWith('/workspace/')) inF = '/workspace/' + inF.replace(/^\//, '');
+        scheduledRenders.push({ inF, outF, inline });
+    }
+
+    for (const { inF, outF, inline } of scheduledRenders) {
+        const html = st.vfs[inF] || inline;
+        if (html) {
+            lg('SYS', `Agent skill invoked: Rendering HTML to Image => ${outF}`);
+            runHtml2Canvas(html, outF);
+        } else {
+            lg('ERR', `Render skipped: File ${inF} not found in VFS and no inline HTML provided.`);
+        }
+    }
+
+    const delRg = /<delegate\s+task=["']?([^"'>]+)["']?\s+temp=["']?([^"'>]+)["']?[\s\S]*?>([\s\S]*?)<\/delegate>/gi;
+    let dm;
+    while ((dm = delRg.exec(ctx)) !== null) {
+        const taskName = dm[1], temp = parseFloat(dm[2]) || 0.7, prompt = dm[3].trim();
+        lg('SYS', `Agent skill invoked: Delegating task [${taskName}] to sub-agent (temp: ${temp})...`);
+        if (typeof memAppend === 'function') memAppend('SYS', `[DELEGATION IN PROGRESS: ${taskName}]`);
+        launchSubAgent(taskName, prompt, temp);
+    }
+}
+
+function runHtml2Canvas(htmlContent, outPath) {
+    if (typeof html2canvas === 'undefined') {
+        lg('ERR', 'html2canvas library is not loaded.'); return;
+    }
+    const frame = document.createElement('iframe');
+    frame.style.position = 'fixed'; frame.style.top = '-9999px'; frame.style.left = '-9999px';
+    frame.style.width = '1080px'; frame.style.height = '1080px'; frame.style.border = 'none';
+    document.body.appendChild(frame);
+
+    const fDoc = frame.contentWindow.document;
+    fDoc.open();
+    fDoc.write(`<!DOCTYPE html><html><head><style>body{margin:0;padding:20px;font-family:sans-serif;background:#ffffff} *{box-sizing:border-box}</style></head><body>${htmlContent}</body></html>`);
+    fDoc.close();
+
+    setTimeout(() => {
+        html2canvas(fDoc.body, { useCORS: true, logging: false, scale: 2 }).then(canvas => {
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+            st.vfs[outPath] = dataUrl;
+            svGlb(); rVfs();
+            lg('SYS', `Render complete! Saved base64 to \`${outPath}\``);
+            if (typeof memAppend === 'function') memAppend('SYS', `[RENDER COMPLETE: Saved graphic to ${outPath}]`);
+            document.body.removeChild(frame);
+        }).catch(e => {
+            lg('ERR', `HTML Render Failed: ${e.message}`);
+            document.body.removeChild(frame);
+        });
+    }, 1500);
+}
+
+async function launchSubAgent(taskName, prompt, temp) {
+    try {
+        const p = `Act as an expert sub-agent. Complete this task directly. Do not converse. Do not refuse. Provide only the final output requested.`;
+        const oldTmp = st.cfg.tmp; st.cfg.tmp = temp;
+
+        let r;
+        if (st.mods.length > 0) {
+            r = await llm(p, prompt, st.mods[0]);
+        } else {
+            throw new Error('No models available for delegation.');
+        }
+
+        st.cfg.tmp = oldTmp;
+        lg('SYS', `Sub-Agent [${taskName}] completed task.`);
+
+        if (typeof memAppend === 'function') {
+            memAppend('SYS', `[SUB-AGENT OUTPUT for Task: ${taskName}]\n${r}`);
+        }
+        const outF = `/workspace/subagent_output_${taskName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.md`;
+        st.vfs[outF] = r; svGlb(); rVfs();
+
+        lg('SYS', `Passing execution back to main agent...`);
+        if (typeof xc === 'function') {
+            setTimeout(() => {
+                xc(`[SYSTEM COMMAND]: Sub-agent task "${taskName}" has completed. Review the SUB-AGENT OUTPUT in your memory and proceed with the very next step of your <plan>.`, false);
+            }, 1000);
+        }
+
+    } catch (e) {
+        lg('ERR', `Sub-agent [${taskName}] failed: ${e.message}`);
+        if (typeof memAppend === 'function') memAppend('SYS', `[SUB-AGENT FAILED for Task: ${taskName}: ${e.message}]`);
+    }
 }
 
 function upFile(e, pfx) {
