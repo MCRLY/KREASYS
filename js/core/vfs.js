@@ -47,6 +47,54 @@ function psVfs(ctx) {
         if (typeof memAppend === 'function') memAppend('SYS', `[DELEGATION IN PROGRESS: ${taskName}]`);
         launchSubAgent(taskName, prompt, temp);
     }
+
+    const tgRg = /<tg_doc\s+chat_id=["']([^"']+)["']>([\s\S]*?)<\/tg_doc>/gi;
+    let tgMatch;
+    while ((tgMatch = tgRg.exec(ctx)) !== null) {
+        const chatId = tgMatch[1];
+        let filePath = tgMatch[2].trim();
+        if (!filePath.startsWith('/system/') && !filePath.startsWith('/workspace/')) filePath = '/workspace/' + filePath.replace(/^\//, '');
+        lg('SYS', `Autonomous Dispatch: Sending \`${filePath}\` to Telegram user ${chatId}...`);
+        if (typeof tgSendDoc === 'function') {
+            tgSendDoc(chatId, filePath);
+        } else {
+            lg('ERR', `Telegram dispatch failed: tgSendDoc function is not defined.`);
+        }
+    }
+
+    const brOp = /<browser_open\s+url=["']([^"']+)["']\s*\/?>/gi;
+    let bom;
+    while ((bom = brOp.exec(ctx)) !== null) {
+        const url = bom[1];
+        lg('SYS', `Agent skill: browser_open → ${url}`);
+        if (typeof browserOpenUrl === 'function') browserOpenUrl(url);
+    }
+
+    const brJs = /<browser_js>([\s\S]*?)<\/browser_js>/gi;
+    let bjm;
+    while ((bjm = brJs.exec(ctx)) !== null) {
+        const code = bjm[1].trim();
+        lg('SYS', `Agent skill: browser_js → ${code.substring(0, 80)}`);
+        const frame = document.getElementById('browser-frame');
+        if (frame && frame.contentWindow) {
+            try {
+                const result = frame.contentWindow.eval(code);
+                const out = result !== undefined ? JSON.stringify(result) : '(undefined)';
+                lg('SYS', `browser_js result: ${out}`);
+                if (typeof memAppend === 'function') memAppend('SYS', `[BROWSER JS RESULT]: ${out}`);
+            } catch (e) { lg('ERR', `browser_js error: ${e.message}`); }
+        }
+    }
+
+    const brSs = /<browser_screenshot\s+out=["']([^"']+)["'](?:\s+tg_chat_id=["']([^"']+)["'])?\s*\/?>/gi;
+    let bsm;
+    while ((bsm = brSs.exec(ctx)) !== null) {
+        let outPath = bsm[1].trim();
+        const tgChatId = bsm[2] ? bsm[2].trim() : null;
+        if (!outPath.startsWith('/system/') && !outPath.startsWith('/workspace/')) outPath = '/workspace/' + outPath.replace(/^\//, '');
+        lg('SYS', `Agent skill: browser_screenshot → ${outPath}`);
+        if (typeof browserScreenshot === 'function') browserScreenshot(outPath, tgChatId);
+    }
 }
 
 function runHtml2Canvas(htmlContent, outPath) {

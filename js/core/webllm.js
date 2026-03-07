@@ -1,94 +1,32 @@
 let wEngine = null;
-let wStatus = 'idle';   
-let wModel = null;     
-let webllm = null;     
-let wGpuAdapter = null; 
-const WLLM_MODELS = [
-    { id: 'SmolLM2-135M-Instruct-q0f16-MLC', label: 'SmolLM2 135M', family: 'SmolLM2', vram: '~0.3 GB', sizeGB: 0.27 },
-    { id: 'SmolLM2-360M-Instruct-q0f16-MLC', label: 'SmolLM2 360M', family: 'SmolLM2', vram: '~0.7 GB', sizeGB: 0.64 },
-    { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 0.5B', family: 'Qwen2.5', vram: '~0.5 GB', sizeGB: 0.46 },
-    { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 1.5B', family: 'Qwen2.5', vram: '~1.1 GB', sizeGB: 1.0 },
-    { id: 'gemma-2-2b-it-q4f16_1-MLC', label: 'Gemma 2 2B', family: 'Gemma', vram: '~1.5 GB', sizeGB: 1.4 },
-    { id: 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC', label: 'TinyLlama 1.1B', family: 'Llama', vram: '~0.7 GB', sizeGB: 0.66 },
-    { id: 'Phi-1_5-q4f16_1-MLC-1k', label: 'Phi 1.5 (1K ctx)', family: 'Phi', vram: '~1.0 GB', sizeGB: 0.84 },
-    { id: 'Llama-3.2-3B-Instruct-q4f32_1-MLC', label: 'Llama 3.2 3B', family: 'Llama', vram: '~2.1 GB', sizeGB: 1.9 },
-    { id: 'Phi-3.5-mini-instruct-q4f16_1-MLC', label: 'Phi 3.5 Mini', family: 'Phi', vram: '~2.4 GB', sizeGB: 2.1 },
-    { id: 'Phi-3-mini-4k-instruct-q4f16_1-MLC', label: 'Phi 3 Mini (4K)', family: 'Phi', vram: '~2.2 GB', sizeGB: 1.9 },
-    { id: 'Llama-3.1-8B-Instruct-q4f32_1-MLC', label: 'Llama 3.1 8B', family: 'Llama', vram: '~5.1 GB', sizeGB: 4.9 },
-    { id: 'Mistral-7B-Instruct-v0.3-q4f16_1-MLC', label: 'Mistral 7B v0.3', family: 'Mistral', vram: '~4.4 GB', sizeGB: 4.1 },
-    { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 7B', family: 'Qwen2.5', vram: '~4.7 GB', sizeGB: 4.4 },
-    { id: 'gemma-2-9b-it-q4f16_1-MLC', label: 'Gemma 2 9B', family: 'Gemma', vram: '~5.5 GB', sizeGB: 5.2 },
-    { id: 'Hermes-2-Pro-Llama-3-8B-q4f32_1-MLC', label: 'Hermes-2 Llama 3 8B', family: 'Llama', vram: '~5.2 GB', sizeGB: 5.0 },
-    { id: 'Hermes-2-Pro-Mistral-7B-q4f16_1-MLC', label: 'Hermes-2 Mistral 7B', family: 'Mistral', vram: '~4.4 GB', sizeGB: 4.1 },
-    { id: 'NeuralHermes-2.5-Mistral-7B-q4f16_1-MLC', label: 'NeuralHermes Mistral 7B', family: 'Mistral', vram: '~4.4 GB', sizeGB: 4.1 },
-];
+let wStatus = 'idle';
+let wModel = null;
+let webllmLib = null;
 
-function wGetModels() { return WLLM_MODELS; }
+async function wImport() {
+    if (webllmLib) return webllmLib;
+    const cdnUrls = [
+        'https://esm.run/@mlc-ai/web-llm',
+        'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm',
+        'https://esm.sh/@mlc-ai/web-llm'
+    ];
+    let lastErr;
+    for (const url of cdnUrls) {
+        try {
+            lg('SYS', `WebLLM: Loading module from ${url}…`);
+            webllmLib = await import(url);
+            lg('SYS', 'WebLLM: Module loaded.');
+            return webllmLib;
+        } catch (e) {
+            lg('SYS', `WebLLM: CDN ${url} failed — trying next.`);
+            lastErr = e;
+        }
+    }
+    throw new Error(`WebLLM CDN import failed on all mirrors: ${lastErr?.message}`);
+}
+
 function wIsReady() { return wStatus === 'ready' && wEngine !== null; }
 function wActiveModel() { return wModel; }
-
-async function wCheckGPU() {
-    if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false;
-    if (wGpuAdapter !== null) return wGpuAdapter; 
-    try {
-        const adapter = await navigator.gpu.requestAdapter();
-        wGpuAdapter = !!adapter;
-        if (adapter && adapter.name) lg('SYS', `WebLLM: WebGPU adapter found — ${adapter.name}`);
-    } catch (_) { wGpuAdapter = false; }
-    return wGpuAdapter;
-}
-
-function wLib() {
-    if (!st.cfg.wllmLib) st.cfg.wllmLib = {};
-    return st.cfg.wllmLib;
-}
-function wIsDownloaded(modelId) { return !!wLib()[modelId]; }
-
-function wMarkDownloaded(modelId) {
-    const meta = WLLM_MODELS.find(m => m.id === modelId);
-    wLib()[modelId] = {
-        id: modelId,
-        label: meta?.label || modelId,
-        family: meta?.family || '',
-        vram: meta?.vram || '',
-        sizeGB: meta?.sizeGB || 0,
-        downloadedAt: new Date().toISOString()
-    };
-    svGlb();
-}
-
-function wMarkRemoved(modelId) {
-    delete wLib()[modelId];
-    svGlb();
-}
-
-async function wDeleteModel(modelId) {
-    try {
-        const keys = await caches.keys();
-        let deleted = 0;
-        for (const key of keys) {
-            if (key.includes(modelId) || key.toLowerCase().includes('webllm')) {
-                const cache = await caches.open(key);
-                const reqs = await cache.keys();
-                for (const req of reqs) {
-                    if (req.url.includes(modelId)) { await cache.delete(req); deleted++; }
-                }
-                const remaining = await cache.keys();
-                if (remaining.length === 0) await caches.delete(key);
-            }
-        }
-        lg('SYS', `WebLLM: Removed ${deleted} cached chunk(s) for "${modelId}".`);
-    } catch (e) {
-        lg('ERR', `WebLLM: Cache deletion failed: ${e.message}`);
-    }
-    wMarkRemoved(modelId);
-    if (wModel === modelId) {
-        if (wEngine) { try { await wEngine.unload(); } catch (_) { } wEngine = null; }
-        wModel = null; wStatus = 'idle';
-    }
-    if (typeof renderWllmLibrary === 'function') renderWllmLibrary();
-    wUpdateStatusPill();
-}
 
 function wUpdateStatusPill() {
     const pill = document.getElementById('wllm-status');
@@ -110,6 +48,7 @@ function wUpdateProgress(status, progress, text) {
     if (barLbl && text) barLbl.textContent = text;
     wUpdateStatusPill();
 }
+
 function wShowError(msg) {
     wStatus = 'error';
     wUpdateStatusPill();
@@ -125,40 +64,34 @@ function wShowError(msg) {
     }, 8000);
 }
 
-async function wImport() {
-    if (webllm) return webllm;
-    const cdnUrls = [
-        'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm',
-        'https://esm.run/@mlc-ai/web-llm',
-        'https://esm.sh/@mlc-ai/web-llm'
-    ];
-    let lastErr;
-    for (const url of cdnUrls) {
-        try {
-            lg('SYS', `WebLLM: Loading module from ${url}…`);
-            webllm = await import(url);
-            lg('SYS', 'WebLLM: Module loaded successfully.');
-            return webllm;
-        } catch (e) {
-            lg('SYS', `WebLLM: CDN ${url} failed — trying next.`);
-            lastErr = e;
-        }
+async function wllmPopulateDropdown() {
+    const sel = document.getElementById('wllm-model-selection');
+    if (!sel) return;
+    try {
+        const lib = await wImport();
+        const models = lib.prebuiltAppConfig.model_list.map(m => m.model_id);
+        sel.innerHTML = '';
+        models.forEach(id => {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = id;
+            sel.appendChild(opt);
+        });
+        const preferred = 'Llama-3.2-3B-Instruct-q4f32_1-MLC';
+        if (models.includes(preferred)) sel.value = preferred;
+    } catch (e) {
+        lg('ERR', `WebLLM: Failed to load model list — ${e.message}`);
+        const opt = document.createElement('option');
+        opt.textContent = 'Error loading models';
+        sel.appendChild(opt);
     }
-    throw new Error(`WebLLM CDN import failed on all mirrors: ${lastErr?.message}`);
 }
 
-async function wLoad(modelId) {
-    if (wStatus === 'loading') {
-        lg('SYS', 'WebLLM: A model is already loading. Please wait.');
-        return;
-    }
-    wUpdateProgress('loading', 0, 'Checking GPU…');
-    const gpuOk = await wCheckGPU();
-    if (!gpuOk) {
-        const errMsg = 'WebGPU adapter check failed or returned null. Models may fail to load or run very slowly.';
-        lg('ERR', 'WebLLM Warning: ' + errMsg);
-        wUpdateProgress('loading', 0, 'GPU Warning: Attempting download anyway…');
-    }
+async function wLoad() {
+    const sel = document.getElementById('wllm-model-selection');
+    const modelId = sel ? sel.value : null;
+    if (!modelId) { lg('ERR', 'WebLLM: No model selected.'); return; }
+    if (wStatus === 'loading') { lg('SYS', 'WebLLM: A model is already loading. Please wait.'); return; }
 
     if (wEngine) { try { await wEngine.unload(); } catch (_) { } wEngine = null; }
     wModel = modelId;
@@ -167,32 +100,32 @@ async function wLoad(modelId) {
 
     try {
         const lib = await wImport();
-        wEngine = await lib.CreateMLCEngine(modelId, {
-            initProgressCallback: (p) => {
-                const pct = Math.round((p.progress || 0) * 100);
-                const text = p.text ? `${p.text} (${pct}%)` : `Downloading… ${pct}%`;
-                wUpdateProgress('loading', p.progress || 0, text);
-                const safeId = modelId.replace(/[^a-z0-9]/gi, '_');
-                const btn = document.getElementById(`wllm-dl-${safeId}`);
-                if (btn) btn.textContent = `${pct}%`;
-            }
+        wEngine = new lib.MLCEngine();
+        wEngine.setInitProgressCallback((report) => {
+            const pct = Math.round((report.progress || 0) * 100);
+            const text = report.text ? `${report.text} (${pct}%)` : `Downloading… ${pct}%`;
+            wUpdateProgress('loading', report.progress || 0, text);
         });
-        wMarkDownloaded(modelId);
+        await wEngine.reload(modelId, { temperature: 1.0, top_p: 1 });
         wUpdateProgress('ready', 1, '');
         const bar = document.getElementById('wllm-progress-bar');
         if (bar) bar.style.background = 'linear-gradient(90deg,var(--ac2),var(--ac))';
         wUpdateStatusPill();
         lg('SYS', `WebLLM: "${modelId}" is ready. Local inference active.`);
         if (typeof showToast === 'function') showToast('Local AI Ready', modelId);
-        if (typeof renderWllmLibrary === 'function') renderWllmLibrary();
+
+        const existing = st.mods.find(m => m.p === 'webllm');
+        if (existing) { existing.m = modelId; existing.n = 'Local AI: ' + modelId; }
+        else { st.mods.unshift({ id: 'wllm-local', n: 'Local AI: ' + modelId, p: 'webllm', m: modelId, k: '', e: '', t: 'text' }); }
+        await svGlb();
+        if (typeof uiMod === 'function') uiMod();
     } catch (e) {
         const userMsg = e.message.includes('GPU') || e.message.includes('WebGPU')
-            ? 'WebGPU error — ensure your browser supports WebGPU and your GPU drivers are up to date.'
+            ? 'WebGPU error — ensure your browser supports WebGPU and GPU drivers are up to date. Try a Tiny model first.'
             : e.message;
         wShowError(userMsg);
         wEngine = null; wModel = null;
         lg('ERR', 'WebLLM Load Error: ' + e.message);
-        if (typeof renderWllmLibrary === 'function') renderWllmLibrary();
     }
 }
 
@@ -201,56 +134,19 @@ async function wUnload() {
     wModel = null; wStatus = 'idle';
     wUpdateStatusPill();
     lg('SYS', 'WebLLM: Engine unloaded. GPU memory freed.');
-    if (typeof renderWllmLibrary === 'function') renderWllmLibrary();
-}
-
-async function wTest(modelId) {
-    const safeId = modelId.replace(/[^a-z0-9]/gi, '_');
-    const btn = document.getElementById(`wllm-test-${safeId}`);
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2"></i> Testing…'; if (typeof lucide !== 'undefined') lucide.createIcons(); }
-
-    if (!wIsReady() || wModel !== modelId) {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="radio"></i> Test'; }
-        if (typeof showToast === 'function') showToast('Load the model first before testing.', modelId);
-        return;
-    }
-    try {
-        const reply = await wEngine.chat.completions.create({
-            messages: [{ role: 'user', content: 'Say the single word PASS and nothing else.' }],
-            temperature: 0,
-            max_tokens: 10
-        });
-        const txt = reply.choices?.[0]?.message?.content?.trim() || '';
-        const pass = txt.toLowerCase().includes('pass');
-        lg('SYS', `WebLLM Test [${modelId}]: ${pass ? 'PASS' : 'WARN — got: ' + txt}`);
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = pass ? '<i data-lucide="check-circle-2"></i> Pass' : '<i data-lucide="alert-triangle"></i> Warn';
-        }
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        setTimeout(() => { if (btn) { btn.innerHTML = '<i data-lucide="radio"></i> Test'; if (typeof lucide !== 'undefined') lucide.createIcons(); } }, 3000);
-    } catch (e) {
-        lg('ERR', `WebLLM Test failed: ${e.message}`);
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="x-circle"></i> Fail'; if (typeof lucide !== 'undefined') lucide.createIcons(); }
-        setTimeout(() => { if (btn) { btn.innerHTML = '<i data-lucide="radio"></i> Test'; if (typeof lucide !== 'undefined') lucide.createIcons(); } }, 3000);
-    }
 }
 
 async function wLlm(systemPrompt, userMsg, temperature = 0.7, isChat = false, onChunk = null) {
     if (!wEngine || wStatus !== 'ready') {
-        throw new Error('No local model loaded. Go to Models tab and download a model first.');
+        throw new Error('No local model loaded. Go to Models tab and select a model first, then click Download & Load.');
     }
     const messages = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }];
-
     if (isChat || onChunk) {
         let full = '';
         const chunks = await wEngine.chat.completions.create({ messages, temperature, stream: true });
         for await (const chunk of chunks) {
             const txt = chunk.choices[0]?.delta?.content || '';
-            if (txt) {
-                full += txt;
-                if (onChunk) onChunk(txt, full);
-            }
+            if (txt) { full += txt; if (onChunk) onChunk(txt, full); }
         }
         return full;
     } else {

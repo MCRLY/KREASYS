@@ -129,6 +129,7 @@ CRITICAL RULE: You are responding to a Telegram message from ${uname}. Plain tex
         let cleanReply = r
             .replace(/<file[^>]*>[\s\S]*?<\/file>/g, '')
             .replace(/<tg_send[^>]*>[\s\S]*?<\/tg_send>/g, '')
+            .replace(/<tg_doc[^>]*>[\s\S]*?<\/tg_doc>/g, '')
             .replace(/<media[^>]*\/>/gi, '')
             .replace(/<plan[^>]*>[\s\S]*?<\/plan>/gi, '')
             .trim();
@@ -232,5 +233,47 @@ async function tgPoll() {
         if (e.message.includes('409') || e.message.includes('terminated')) {
             lg('WAR', 'Telegram: Conflict detected. Refreshing instance...');
         }
+    }
+}
+
+async function tgSendDoc(chatId, filePath) {
+    const t = st.cfg.tg;
+    if (!t) return lg('ERR', 'Telegram: Cannot dispatch document, no bot token configured.');
+
+    let fData = st.vfs[filePath];
+    if (!fData) return lg('ERR', `Telegram: File \`${filePath}\` not found in VFS.`);
+
+    try {
+        const isBase64 = fData.startsWith('data:');
+        let formData = new FormData();
+        formData.append('chat_id', chatId);
+
+        const filename = filePath.split('/').pop();
+
+        if (isBase64) {
+            const mime = fData.split(';')[0].split(':')[1];
+            const b64 = fData.split(',')[1];
+            const bin = atob(b64);
+            const ary = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) ary[i] = bin.charCodeAt(i);
+            const blob = new Blob([ary], { type: mime });
+            formData.append('document', blob, filename);
+        } else {
+            const blob = new Blob([fData], { type: 'text/plain' });
+            formData.append('document', blob, filename);
+        }
+
+        const res = await fetch(`https://api.telegram.org/bot${t}/sendDocument`, {
+            method: 'POST',
+            body: formData
+        });
+        const d = await res.json();
+        if (d.ok) {
+            lg('SYS', `Telegram: Document \`${filename}\` dispatched explicitly to user ${chatId}.`);
+        } else {
+            lg('ERR', `Telegram Document Dispatch failed: ${d.description}`);
+        }
+    } catch (e) {
+        lg('ERR', `Telegram Document Dispatch error: ${e.message}`);
     }
 }

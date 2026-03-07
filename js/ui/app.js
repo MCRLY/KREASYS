@@ -6,7 +6,7 @@ async function boot() {
     uiMod();
     bind();
     wllmInit();
-    if (typeof memInit === 'function') memInit(); // start autonomous memory compression
+    if (typeof memInit === 'function') memInit();
     setInterval(hlth, 1000);
     if (st.cfg.auto) tgTog();
     lg('SYS', 'KREASYS Core Initialized. VFS Data securely segregated. Memory system active.');
@@ -212,38 +212,70 @@ function showToast(msg, filePath) {
 }
 
 function renderPlan(steps) {
-    const c = $('#flowchart-container');
+    const c = $('#activity-timeline');
     if (!c) return;
-    c.style.display = 'flex';
-    c.innerHTML = '';
+
+    // Remove empty placeholder if any
+    if (c.innerHTML.includes('waiting for events')) c.innerHTML = '';
+
+    // Find or create the flowchart block in timeline
+    let flowBlock = $('#activity-flowchart', c);
+    if (!flowBlock) {
+        flowBlock = document.createElement('div');
+        flowBlock.id = 'activity-flowchart';
+        flowBlock.style.cssText = 'display:flex;flex-direction:column;gap:8px;padding:16px;background:rgba(0,179,255,0.05);border:1px solid rgba(0,179,255,0.2);border-radius:12px;margin-bottom:12px;';
+        c.appendChild(flowBlock);
+    }
+
+    flowBlock.innerHTML = '<div style="font-size:11px;color:var(--ac2);font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px"><i data-lucide="git-branch" style="width:12px;display:inline;vertical-align:middle;margin-right:4px"></i> Active execution plan</div>';
+
+    const trackDom = document.createElement('div');
+    trackDom.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:8px;';
 
     steps.forEach((s, idx) => {
         const d = document.createElement('div');
-        d.className = `flow-step ${s.status}`;
+        d.style.cssText = `display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;`;
 
         let icon = 'circle';
-        if (s.status === 'done') icon = 'check-circle';
-        if (s.status === 'active') icon = 'loader';
+        if (s.status === 'done') {
+            icon = 'check-circle';
+            d.style.background = 'rgba(57,255,20,0.15)';
+            d.style.color = 'var(--ok)';
+            d.style.border = '1px solid rgba(57,255,20,0.4)';
+        } else if (s.status === 'active') {
+            icon = 'loader';
+            d.style.background = 'rgba(0,179,255,0.15)';
+            d.style.color = 'var(--ac2)';
+            d.style.border = '1px solid rgba(0,179,255,0.4)';
+        } else {
+            d.style.background = 'rgba(255,255,255,0.05)';
+            d.style.color = 'var(--dim)';
+            d.style.border = '1px solid rgba(255,255,255,0.1)';
+        }
 
         d.innerHTML = `<i data-lucide="${icon}" style="width:14px;height:14px"></i><span>${s.name}</span>`;
-        c.appendChild(d);
+        trackDom.appendChild(d);
 
         if (idx < steps.length - 1) {
             const a = document.createElement('i');
-            a.className = 'flow-arrow';
             a.setAttribute('data-lucide', 'arrow-right');
             a.style.width = '14px';
             a.style.height = '14px';
-            c.appendChild(a);
+            a.style.color = 'var(--dim)';
+            trackDom.appendChild(a);
         }
     });
+
+    flowBlock.appendChild(trackDom);
+    c.scrollTop = c.scrollHeight;
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 function psPlan(ctx) {
     const m = ctx.match(/<plan>([\s\S]*?)<\/plan>/i);
     if (!m) {
-        if ($('#flowchart-container')) $('#flowchart-container').style.display = 'none';
+        const flowBlock = $('#activity-flowchart');
+        if (flowBlock) flowBlock.style.display = 'none';
         return;
     }
 
@@ -255,7 +287,10 @@ function psPlan(ctx) {
     }
 
     if (steps.length > 0) renderPlan(steps);
-    else if ($('#flowchart-container')) $('#flowchart-container').style.display = 'none';
+    else {
+        const flowBlock = $('#activity-flowchart');
+        if (flowBlock) flowBlock.style.display = 'none';
+    }
 }
 
 function lg(r, c) {
@@ -264,6 +299,33 @@ function lg(r, c) {
     const h = (typeof marked !== 'undefined') ? marked.parse(c) : c;
     e.innerHTML = `<div class="msg-role ${r}">${r}</div><div class="msg-ctx">${h}</div>`;
     w.appendChild(e); w.scrollTop = w.scrollHeight;
+
+    // Also push to Activity Tracking visualizer
+    const actTl = $('#activity-timeline');
+    if (actTl && (r === 'SYS' || r === 'ERR' || r === 'AGT')) {
+        if (actTl.innerHTML.includes('waiting for events')) actTl.innerHTML = '';
+        const a = document.createElement('div');
+        const isErr = r === 'ERR';
+        const isSys = r === 'SYS';
+
+        a.style.cssText = `display:flex;align-items:flex-start;gap:12px;padding:12px 16px;background:${isErr ? 'rgba(255,74,74,0.05)' : 'rgba(255,255,255,0.02)'};border:1px solid ${isErr ? 'rgba(255,74,74,0.3)' : 'rgba(255,255,255,0.05)'};border-radius:10px;animation:fade-in 0.3s ease;`;
+
+        let actIcon = 'zap';
+        if (isErr) actIcon = 'alert-triangle';
+        else if (c.includes('VFS written')) actIcon = 'save';
+        else if (c.includes('Delegating')) actIcon = 'git-pull-request';
+        else if (c.includes('Render complete')) actIcon = 'image';
+        else if (c.includes('Autonomous Dispatch')) actIcon = 'send';
+        else if (r === 'AGT') actIcon = 'bot';
+
+        a.innerHTML = `<div style="padding:6px;background:${isErr ? 'var(--err)' : (isSys ? 'var(--ac2)' : 'var(--ac)')};border-radius:8px;color:#000;flex-shrink:0"><i data-lucide="${actIcon}" style="width:16px;height:16px"></i></div>
+                       <div style="flex:1"><div style="font-size:11px;color:var(--dim);font-weight:600;margin-bottom:4px">${new Date().toLocaleTimeString()} • ${r}</div>
+                       <div style="font-size:13px;color:var(--txt);line-height:1.5">${h}</div></div>`;
+        actTl.appendChild(a);
+        actTl.scrollTop = actTl.scrollHeight;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
     if (r === 'SYS' || r === 'AGT' || r === 'ERR') {
         let m = st.vfs['/system/memory.log'] || '';
         m += `[${new Date().toISOString()}] ${r}: ${c.substring(0, 500)}\n`;
@@ -320,128 +382,23 @@ function hlth() {
 // Start sequence
 boot();
 
-// ── WebLLM UI ─────────────────────────────────────────────────────────────────
-
-/** Called on boot: WebGPU check + initial library render */
 function wllmInit() {
-    if (typeof wCheckGPU !== 'function') return;
-    if (!wCheckGPU()) {
+    if ('gpu' in navigator) {
+        navigator.gpu.requestAdapter().then(a => {
+            if (a) lg('SYS', `WebLLM: WebGPU adapter available.`);
+            else {
+                const warn = document.getElementById('wllm-gpu-warn');
+                if (warn) warn.style.display = 'block';
+                lg('SYS', 'WebLLM: No WebGPU adapter found. Models may still work on some browsers.');
+            }
+        }).catch(() => {
+            const warn = document.getElementById('wllm-gpu-warn');
+            if (warn) warn.style.display = 'block';
+        });
+    } else {
         const warn = document.getElementById('wllm-gpu-warn');
         if (warn) warn.style.display = 'block';
-        lg('SYS', 'WebLLM: WebGPU not available in this browser.');
-    } else {
-        navigator.gpu.requestAdapter().then(a => {
-            if (a && a.name) lg('SYS', `WebLLM: WebGPU adapter: ${a.name}`);
-        }).catch(() => { });
+        lg('SYS', 'WebLLM: WebGPU is not available in this browser.');
     }
-    renderWllmLibrary();
+    if (typeof wllmPopulateDropdown === 'function') wllmPopulateDropdown();
 }
-
-/**
- * Renders the full model library grid into #wllm-library.
- * Shows every model with: status badge (Installed / Available), size, family,
- * and action buttons: Load/Activate, Test, Delete.
- */
-function renderWllmLibrary() {
-    const container = document.getElementById('wllm-library');
-    if (!container || typeof wGetModels !== 'function') return;
-
-    const models = wGetModels();
-    const lib = (typeof wLib === 'function') ? wLib() : {};
-    const active = (typeof wActiveModel === 'function') ? wActiveModel() : null;
-    const gpuOk = (typeof wCheckGPU === 'function') ? wCheckGPU() : false;
-
-    // Group labels
-    const sizeLabels = { 0.27: 'Tiny', 0.64: 'Tiny', 0.46: 'Tiny', 1.0: 'Small', 1.4: 'Small', 0.66: 'Small', 0.84: 'Small', 1.9: 'Medium', 2.1: 'Medium', 4.9: 'Large', 4.1: 'Large', 4.4: 'Large', 5.2: 'Large', 5.0: 'Large' };
-    const sizeGroups = {};
-    models.forEach(m => {
-        const gb = m.sizeGB;
-        const g = gb < 1 ? 'Tiny — Any Machine' : gb < 2 ? 'Small — Budget GPU' : gb < 4 ? 'Medium — Mainstream GPU' : 'Large — Dedicated GPU';
-        (sizeGroups[g] = sizeGroups[g] || []).push(m);
-    });
-
-    container.innerHTML = '';
-
-    Object.entries(sizeGroups).forEach(([groupName, mods]) => {
-        const grpHdr = document.createElement('div');
-        grpHdr.style.cssText = 'font-size:10px;font-weight:700;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;padding:6px 0 4px;border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:4px';
-        grpHdr.textContent = groupName;
-        container.appendChild(grpHdr);
-
-        mods.forEach(m => {
-            const isInstalled = !!lib[m.id];
-            const isActive = active === m.id;
-            const safeId = m.id.replace(/[^a-z0-9]/gi, '_');
-
-            const row = document.createElement('div');
-            row.style.cssText = `display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid ${isActive ? 'rgba(0,255,204,0.3)' : isInstalled ? 'rgba(0,179,255,0.2)' : 'rgba(255,255,255,0.05)'};background:${isActive ? 'rgba(0,255,204,0.05)' : isInstalled ? 'rgba(0,179,255,0.04)' : 'rgba(255,255,255,0.02)'};flex-wrap:wrap;`;
-
-            // Status dot + label
-            const dotColor = isActive ? 'var(--ok)' : isInstalled ? 'var(--ac2)' : 'var(--dim)';
-            const statusLabel = isActive ? 'Active' : isInstalled ? 'Installed' : 'Not Downloaded';
-
-            // Download date tooltip
-            const dlDate = lib[m.id]?.downloadedAt ? `Downloaded: ${new Date(lib[m.id].downloadedAt).toLocaleDateString()}` : '';
-
-            row.innerHTML = `
-                <span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;" title="${statusLabel}"></span>
-                <div style="flex:1;min-width:0">
-                    <div style="font-size:13px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.label}</div>
-                    <div style="font-size:11px;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">
-                        <span>${m.family}</span><span>${m.vram}</span>${dlDate ? `<span style="color:var(--ac2)">${dlDate}</span>` : ''}
-                    </div>
-                </div>
-                <span style="font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;letter-spacing:.5px;white-space:nowrap;background:${isActive ? 'rgba(0,255,204,0.15)' : isInstalled ? 'rgba(0,179,255,0.12)' : 'rgba(255,255,255,0.05)'};color:${isActive ? 'var(--ac)' : isInstalled ? 'var(--ac2)' : 'var(--dim)'}">${statusLabel}</span>
-                <div style="display:flex;gap:6px;flex-shrink:0">
-                    ${isActive
-                    ? `<button class="btn err" onclick="wUnload()" style="padding:6px 10px;font-size:12px" title="Unload from GPU"><i data-lucide="power"></i> Unload</button>`
-                    : `<button class="btn ${isInstalled ? 'okc' : 'primary'}" onclick="wllmActivate('${m.id}')" ${!gpuOk ? 'disabled title="WebGPU not available"' : ''} style="padding:6px 12px;font-size:12px"><i data-lucide="${isInstalled ? 'play' : 'download-cloud'}"></i> ${isInstalled ? 'Activate' : 'Download &amp; Load'}</button>`
-                }
-                    ${isInstalled
-                    ? `<button id="wllm-test-${safeId}" class="btn" onclick="wTest('${m.id}')" ${!isActive ? 'disabled title="Load this model first to test it"' : ''} style="padding:6px 10px;font-size:12px" title="Send a ping to verify the model"><i data-lucide="radio"></i> Test</button>
-                           <button class="btn err" onclick="wllmDelete('${m.id}')" style="padding:6px 10px;font-size:12px" title="Remove from browser cache"><i data-lucide="trash-2"></i></button>`
-                    : ''
-                }
-                </div>`;
-            container.appendChild(row);
-        });
-    });
-
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-}
-
-/** Download + activate a model (or just activate if already installed) */
-async function wllmActivate(modelId) {
-    // Register in router
-    const meta = (typeof wGetModels === 'function') ? wGetModels().find(m => m.id === modelId) : null;
-    const label = meta ? meta.label : modelId;
-    const existing = st.mods.find(m => m.p === 'webllm');
-    if (existing) { existing.m = modelId; existing.n = 'Local AI: ' + label; }
-    else { st.mods.unshift({ id: 'wllm-local', n: 'Local AI: ' + label, p: 'webllm', m: modelId, k: '', e: '', t: 'text' }); }
-    await svGlb();
-    uiMod();
-    renderWllmLibrary();
-
-    await wLoad(modelId);
-    renderWllmLibrary();
-    wUpdateStatusPill();
-}
-
-/** Permanently delete a model from cache + library */
-async function wllmDelete(modelId) {
-    if (!confirm(`Remove "${modelId}" from your browser cache? You will need to download it again.`)) return;
-    await wDeleteModel(modelId);       // from webllm.js — handles cache + state
-    // Remove from router if it was the webllm entry
-    const idx = st.mods.findIndex(m => m.p === 'webllm' && m.m === modelId);
-    if (idx !== -1) { st.mods.splice(idx, 1); await svGlb(); uiMod(); }
-    renderWllmLibrary();
-    wUpdateStatusPill();
-}
-
-/** Legacy compatibility for old onClick handlers — now delegates to wllmActivate */
-async function wllmLoad() {
-    const sel = document.getElementById('wllm-model-select');
-    if (sel && sel.value) await wllmActivate(sel.value);
-}
-
-

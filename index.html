@@ -33,8 +33,9 @@
         <div class="nav-tab" data-target="p-ide"><i data-lucide="code-2"></i> Workspace</div>
         <div class="nav-tab" data-target="p-id"><i data-lucide="brain-circuit"></i> Core Data</div>
         <div class="nav-tab" data-target="p-mod"><i data-lucide="network"></i> Models</div>
-        <div class="nav-tab" data-target="p-wllm"><i data-lucide="cpu"></i> Local AI</div>
-        <div class="nav-tab" data-target="p-term"><i data-lucide="activity"></i> SysLog</div>
+        <div class="nav-tab" data-target="p-activity"><i data-lucide="activity"></i> Tracking</div>
+        <div class="nav-tab" data-target="p-browser"><i data-lucide="globe"></i> Browser</div>
+        <div class="nav-tab" data-target="p-term"><i data-lucide="terminal-square"></i> SysLog</div>
         <div class="nav-tab" data-target="p-cfg"><i data-lucide="share-2"></i> Channeling</div>
         <button class="btn primary" id="btn-install" onclick="deferredInstallPrompt&&deferredInstallPrompt.prompt()"
             style="display:none;padding:6px 14px;font-size:12px;height:32px;border-radius:8px"><i
@@ -183,18 +184,14 @@
                             step="0.1" oninput="this.nextElementSibling.innerText=this.value;svGlb()"><span
                             style="color:var(--ac);font-weight:700"></span></div>
                 </div>
-            </div>
-        </div>
 
-        <!-- ── LOCAL AI (WebLLM) — Dedicated Tab ──────────────────────────── -->
-        <div id="p-wllm" class="panel">
-            <div style="max-width:1000px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:15px">
+                <!-- ── LOCAL AI (WebLLM) ──────────────────────────── -->
                 <div class="card" style="border-color:rgba(0,255,204,0.2)">
                     <div class="c-head"
                         style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
                         <div style="display:flex;align-items:center;gap:10px">
                             <i data-lucide="cpu"></i>
-                            Local AI — Model Library
+                            Local Browser Compute
                             <span
                                 style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(0,255,204,0.12);color:var(--ac);border:1px solid rgba(0,255,204,0.3);letter-spacing:1px;font-weight:700">WEBGPU</span>
                         </div>
@@ -214,30 +211,22 @@
                         compatible GPU.
                     </div>
 
-                    <div
-                        style="margin-bottom:16px;padding:12px 14px;background:rgba(0,179,255,0.08);border:1px solid rgba(0,179,255,0.3);border-radius:8px;font-size:12px;color:var(--ac2);line-height:1.6">
-                        <i data-lucide="monitor-speaker"
-                            style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:6px"></i>
-                        <strong>Hardware Notice:</strong> Downloading models without an adequate Dedicated GPU may <span
-                            style="color:var(--err)">fail or crash your browser tab</span> during the WebGPU compiling
-                        phase. To let you experiment freely, KREASYS will <strong>NOT block</strong> you from attempting
-                        a download if your PC fails the initial WebGPU check. We highly recommend testing <strong
-                            style="color:var(--ok)">Tiny models (e.g., SmolLM2)</strong> first to verify your system's
-                        compatibility before downloading larger multi-gigabyte models.
-                    </div>
-
                     <p style="font-size:13px;color:var(--dim);line-height:1.6;margin-bottom:16px">Run open-source LLMs
                         entirely in your browser — <strong style="color:var(--txt)">no API key required</strong>. Models
-                        are downloaded once and cached for instant reuse. Click <strong
-                            style="color:var(--txt)">Download &amp; Load</strong> to activate a model; <strong
-                            style="color:var(--txt)">Delete</strong> to remove it from your browser cache.</p>
+                        are downloaded once and cached for instant reuse.</p>
 
+                    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+                        <select id="wllm-model-selection"
+                            style="flex:1;min-width:250px;padding:10px;border-radius:8px;background:var(--bg);color:var(--txt);border:1px solid var(--bd)"></select>
+                        <button class="btn okc" id="wllm-download-btn" onclick="wLoad()"><i data-lucide="download"></i>
+                            Download & Load</button>
+                    </div>
 
                     <div id="wllm-progress-wrap" style="display:none;margin-bottom:16px">
                         <div style="display:flex;justify-content:space-between;margin-bottom:6px">
                             <span
-                                style="font-size:11px;font-weight:600;color:var(--dim);letter-spacing:1px;text-transform:uppercase">Download
-                                Progress</span>
+                                style="font-size:11px;font-weight:600;color:var(--dim);letter-spacing:1px;text-transform:uppercase">System
+                                Status</span>
                             <span id="wllm-progress-label" style="font-size:11px;color:var(--ac2)"></span>
                         </div>
                         <div style="height:6px;background:rgba(255,255,255,0.05);border-radius:10px;overflow:hidden">
@@ -246,16 +235,27 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
 
-                    <div id="wllm-library" style="display:flex;flex-direction:column;gap:8px"></div>
-
-                    <p style="font-size:11.5px;color:var(--dim);margin-top:14px;line-height:1.5">
-                        <i data-lucide="info"
-                            style="width:12px;height:12px;display:inline;vertical-align:middle;margin-right:4px"></i>
-                        Powered by <a href="https://webllm.mlc.ai" target="_blank"
-                            style="color:var(--ac2);text-decoration:none">WebLLM</a> &amp; WebGPU. Models are stored in
-                        your browser's Cache Storage.
-                    </p>
+        <!-- ── TRACKING ACTIVITY TAB ──────────────────────────── -->
+        <div id="p-activity" class="panel" style="padding:0;background:transparent;">
+            <div
+                style="padding:16px 24px;display:flex;gap:24px;background:rgba(5,5,10,0.8);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.05);flex-wrap:wrap;z-index:10;box-shadow:0 4px 15px rgba(0,0,0,0.3)">
+                <div style="font-size:13px;color:var(--txt);font-weight:600;"><i data-lucide="activity"
+                        style="width:14px;display:inline-block;margin-right:6px;color:var(--ac2)"></i> Live AI Pipeline
+                    Tracking</div>
+                <div style="flex:1"></div>
+                <button class="btn" style="padding:6px 12px;font-size:11px"
+                    onclick="document.getElementById('activity-timeline').innerHTML=''"><i data-lucide="trash"></i>
+                    Clear</button>
+            </div>
+            <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;padding:20px">
+                <div id="activity-timeline"
+                    style="display:flex;flex-direction:column;gap:12px;width:100%;max-width:900px;margin:0 auto">
+                    <div style="font-size:12px;color:var(--dim);text-align:center;padding:20px;font-style:italic">
+                        Activity timeline is waiting for events...</div>
                 </div>
             </div>
         </div>
@@ -372,16 +372,79 @@
             </div>
         </div>
 
+        <!-- ── BROWSER / CONSOLE TAB ────────────────────── -->
+        <div id="p-browser" class="panel" style="padding:0;background:transparent;">
+            <div style="display:flex;flex-direction:column;height:100%;width:100%">
+
+                <!-- URL Bar -->
+                <div
+                    style="padding:12px 16px;display:flex;gap:10px;align-items:center;background:rgba(5,5,10,0.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.05);flex-shrink:0;flex-wrap:wrap">
+                    <i data-lucide="globe" style="color:var(--ac2);width:16px;flex-shrink:0"></i>
+                    <input id="browser-url" type="text"
+                        placeholder="Enter URL or paste HTML... (e.g. https://example.com)"
+                        style="flex:1;min-width:200px;padding:8px 12px;font-size:13px;border-radius:8px">
+                    <button class="btn okc" style="padding:8px 14px;font-size:12px" onclick="browserGo()"><i
+                            data-lucide="arrow-right"></i> Go</button>
+                    <button class="btn" style="padding:8px 14px;font-size:12px" onclick="browserScrape()"><i
+                            data-lucide="scan-text"></i> Scrape</button>
+                    <button class="btn primary" style="padding:8px 14px;font-size:12px" onclick="browserScreenshot()"><i
+                            data-lucide="camera"></i> Screenshot</button>
+                    <button class="btn err" style="padding:8px 14px;font-size:12px" onclick="browserClear()"><i
+                            data-lucide="x"></i> Clear</button>
+                </div>
+
+                <!-- Split view: iframe + console -->
+                <div style="flex:1;display:flex;flex-direction:row;overflow:hidden;gap:0">
+
+                    <!-- Left: iframe viewer -->
+                    <div id="browser-iframe-wrap"
+                        style="flex:2;min-width:0;background:#000;border-right:1px solid rgba(255,255,255,0.05);position:relative;">
+                        <iframe id="browser-frame" style="width:100%;height:100%;border:none;background:#fff"
+                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                            src="about:blank"></iframe>
+                        <div id="browser-frame-placeholder"
+                            style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--dim);gap:10px;font-size:14px;pointer-events:none">
+                            <i data-lucide="globe" style="width:40px;height:40px;opacity:0.3"></i>
+                            <span>AI-Controllable Browser</span>
+                            <span style="font-size:11px;opacity:0.6">Enter a URL, paste HTML, or let the AI use
+                                &lt;browser_open&gt; to load pages</span>
+                        </div>
+                    </div>
+
+                    <!-- Right: console panel -->
+                    <div
+                        style="flex:1;min-width:280px;max-width:450px;display:flex;flex-direction:column;background:rgba(5,5,10,0.95)">
+                        <div
+                            style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:11px;font-weight:700;color:var(--ac2);letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:8px;flex-shrink:0">
+                            <i data-lucide="terminal" style="width:13px"></i> JS Console
+                        </div>
+                        <div id="browser-console-out"
+                            style="flex:1;overflow-y:auto;padding:10px 12px;font-size:12px;font-family:var(--font-mono);line-height:1.7;color:var(--txt);display:flex;flex-direction:column;gap:4px">
+                        </div>
+                        <div
+                            style="padding:10px 12px;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:8px;flex-shrink:0">
+                            <textarea id="browser-js-in" rows="2"
+                                placeholder="Enter JS to run in the iframe... (e.g. document.title)"
+                                style="flex:1;resize:none;font-size:12px;font-family:var(--font-mono);padding:8px;border-radius:8px;min-height:56px"></textarea>
+                            <button class="btn primary" style="width:48px;flex-shrink:0;padding:0;border-radius:8px"
+                                onclick="browserRunJs()"><i data-lucide="play"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <div id="toast-container" class="toast-container"></div>
-    <script src="js/core/state.js?v=3" defer></script>
-    <script src="js/core/vfs.js?v=3" defer></script>
-    <script src="js/core/webllm.js?v=3" defer></script>
-    <script src="js/core/memory.js?v=3" defer></script>
-    <script src="js/core/ai.js?v=3" defer></script>
-    <script src="js/core/telegram.js?v=3" defer></script>
-    <script src="js/ui/app.js?v=3" defer></script>
+    <script src="js/core/state.js?v=4" defer></script>
+    <script src="js/core/vfs.js?v=4" defer></script>
+    <script src="js/core/webllm.js?v=4" defer></script>
+    <script src="js/core/memory.js?v=4" defer></script>
+    <script src="js/core/ai.js?v=4" defer></script>
+    <script src="js/core/telegram.js?v=4" defer></script>
+    <script src="js/ui/app.js?v=4" defer></script>
+    <script src="js/ui/browser.js?v=4" defer></script>
     <script src="js/global.js" defer></script>
 </body>
 
